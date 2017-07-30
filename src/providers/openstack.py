@@ -98,7 +98,7 @@ class OpenStack(Authentication):
         :rtype: object
         """
         data = filter(lambda elm: elm.name == name, self.images)
-        if data.__len__() == 0:
+        if len(data) == 0:
             if raises:
                 raise Exception('Image %s not found!' % name)
             return None
@@ -115,7 +115,7 @@ class OpenStack(Authentication):
         :rtype: object
         """
         data = filter(lambda elm: elm.name == name, self.sizes)
-        if data.__len__() == 0:
+        if len(data) == 0:
             if raises:
                 raise Exception('Size %s not found!' % name)
             return None
@@ -132,7 +132,7 @@ class OpenStack(Authentication):
         :rtype: list
         """
         data = filter(lambda elm: elm.name == name, self.networks)
-        if data.__len__() == 0:
+        if len(data) == 0:
             if raises:
                 raise Exception('Network %s not found!' % name)
             return None
