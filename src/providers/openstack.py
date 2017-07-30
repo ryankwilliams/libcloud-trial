@@ -68,9 +68,145 @@ class OpenStack(Authentication):
         """Constructor."""
         super(OpenStack, self).__init__(auth_file)
 
-    def images(self):
-        """List images."""
-        print('Fetching available images..')
+    @property
+    def nodes(self):
+        """Return list of nodes."""
+        return self.driver.list_nodes()
 
-        for item in self.driver.list_images():
-            print(item.name)
+    @property
+    def images(self):
+        """Return list of images."""
+        return self.driver.list_images()
+
+    @property
+    def sizes(self):
+        """Return list of sizes."""
+        return self.driver.list_sizes()
+
+    @property
+    def networks(self):
+        """Return list of networks."""
+        return self.driver.ex_list_networks()
+
+    def image_lookup(self, name, raises=False):
+        """Image lookup to fetch image object.
+        :param name: Image name.
+        :type name: str
+        :param raises: Raise exception if image not found.
+        :type raises: bool
+        :return: Image object.
+        :rtype: object
+        """
+        data = filter(lambda elm: elm.name == name, self.images)
+        if data.__len__() == 0:
+            if raises:
+                raise Exception('Image %s not found!' % name)
+            return None
+        else:
+            return data[0]
+
+    def size_lookup(self, name, raises=False):
+        """Lookup size object based on size given.
+        :param name: Image name.
+        :type name: str
+        :param raises: Raise exception if size not found.
+        :type raises: bool
+        :return: Image object.
+        :rtype: object
+        """
+        data = filter(lambda elm: elm.name == name, self.sizes)
+        if data.__len__() == 0:
+            if raises:
+                raise Exception('Size %s not found!' % name)
+            return None
+        else:
+            return data[0]
+
+    def network_lookup(self, name, raises=False):
+        """Lookup network object based on network given.
+        :param name: Network name.
+        :type name: str
+        :param raises: Raise exception if network not found.
+        :type raises: bool
+        :return: Network object.
+        :rtype: list
+        """
+        data = filter(lambda elm: elm.name == name, self.networks)
+        if data.__len__() == 0:
+            if raises:
+                raise Exception('Network %s not found!' % name)
+            return None
+        else:
+            return data
+
+    def node_lookup(self, name, raises=False):
+        """Lookup node object based on node given.
+        :param name: Node name.
+        :type name: str
+        :param raises: Raise exception if node not found.
+        :type raises: bool
+        :return: Node object.
+        :rtype: object
+        """
+        data = filter(lambda elm: elm.name == name, self.nodes)
+        if len(data) == 0:
+            if raises:
+                raise Exception('Node %s not found!' % name)
+            return None
+        else:
+            return data[0]
+
+    def associate_floating_ip(self):
+        """Associate floating ip to node."""
+        raise NotImplementedError
+
+    def disassociate_floating_ip(self):
+        """Disassociate floating ip from node."""
+        raise NotImplementedError
+
+    def create(self, name, image, size, network):
+        """Create node.
+        :param name: Node name.
+        :type name: str
+        :param image: Image name.
+        :type image: str
+        :param size: Flavor size name.
+        :type size: str
+        :param network: Network name.
+        :type network: str
+        """
+        # Lookup image object
+        _image = self.image_lookup(image, raises=True)
+
+        # Lookup size object
+        _size = self.size_lookup(size, raises=True)
+
+        # Lookup network object
+        _network = self.network_lookup(network, raises=True)
+
+        # Create node
+        node = self.driver.create_node(
+            name=name,
+            image=_image,
+            size=_size,
+            networks=_network
+        )
+
+        # Wait for node to finish building
+        self.driver.wait_until_running([node])
+
+        # TODO: Associate floating ip
+        self.associate_floating_ip()
+
+    def delete(self, name):
+        """Delete node.
+        :param name: Node name.
+        :type name: str
+        """
+        # Lookup node object
+        _node = self.node_lookup(name, raises=True)
+
+        # TODO: Disassociate floating ip
+
+        # Delete node
+        self.driver.destroy_node(_node)
