@@ -196,7 +196,7 @@ class OpenStack(Authentication):
         self.driver.wait_until_running([node])
 
         # TODO: Associate floating ip
-        self.associate_floating_ip()
+        # self.associate_floating_ip()
 
     def delete(self, name):
         """Delete node.

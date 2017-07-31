@@ -1,7 +1,8 @@
 ---
 
+# Trystack
 openstack:
-  url:
+  url: http://x86.trystack.org:5000
   tenant:
   username:
   password:
