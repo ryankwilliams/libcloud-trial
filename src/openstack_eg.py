@@ -15,13 +15,15 @@ if '__main__' == __name__:
     node = 'node1'
     image = 'Fedora26'
     flavor_size = 'm1.small'
-    internal_network = ''
+    network = 'internal'
+    floating_ip_pool = 'public'
 
     obj.create(
         node,
         image,
         flavor_size,
-        internal_network
+        network,
+        floating_ip_pool
     )
 
     time.sleep(10)

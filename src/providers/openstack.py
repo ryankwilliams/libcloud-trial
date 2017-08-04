@@ -15,7 +15,7 @@ class Authentication(object):
         :param auth_file: Authentication information set by file.
         :type auth_file: bool
         """
-        self._driver = None
+        self._driver = object
 
         # ignore SSL
         libcloud.security.VERIFY_SSL_CERT = False
@@ -67,6 +67,81 @@ class OpenStack(Authentication):
     def __init__(self, auth_file=None):
         """Constructor."""
         super(OpenStack, self).__init__(auth_file)
+        self._node = object
+        self._image = object
+        self._size = object
+        self._network = object
+        self._floating_ip_pool = object
+
+    @property
+    def node(self):
+        """Return node."""
+        return self._node
+
+    @node.setter
+    def node(self, node):
+        """Set node object.
+
+        :param node: Node object.
+        :type node: object
+        """
+        self._node = node
+
+    @property
+    def image(self):
+        """Return image."""
+        return self._image
+
+    @image.setter
+    def image(self, image):
+        """Set image object.
+
+        :param image: Image object.
+        :type image: object
+        """
+        self._image = image
+
+    @property
+    def size(self):
+        """Return size (flavor)."""
+        return self._size
+
+    @size.setter
+    def size(self, size):
+        """Set size (flavor) object.
+
+        :param size: Size object.
+        :type size: object
+        """
+        self._size = size
+
+    @property
+    def network(self):
+        """Return network."""
+        return self._network
+
+    @network.setter
+    def network(self, network):
+        """Set network object.
+
+        :param network: Network object.
+        :type network: object
+        """
+        self._network = network
+
+    @property
+    def floating_ip_pool(self):
+        """Return floating IP pool object."""
+        return self._floating_ip_pool
+
+    @floating_ip_pool.setter
+    def floating_ip_pool(self, floating_ip_pool):
+        """Set network object.
+
+        :param floating_ip_pool: Floating IP pool object.
+        :type floating_ip_pool: object
+        """
+        self._floating_ip_pool = floating_ip_pool
 
     @property
     def nodes(self):
@@ -88,83 +163,82 @@ class OpenStack(Authentication):
         """Return list of networks."""
         return self.driver.ex_list_networks()
 
-    def image_lookup(self, name, raises=False):
+    @property
+    def floating_ip_pools(self):
+        """Return list of floating ip pools."""
+        return self.driver.ex_list_floating_ip_pools()
+
+    def image_lookup(self, name):
         """Image lookup to fetch image object.
         :param name: Image name.
         :type name: str
-        :param raises: Raise exception if image not found.
-        :type raises: bool
-        :return: Image object.
-        :rtype: object
         """
         data = filter(lambda elm: elm.name == name, self.images)
         if len(data) == 0:
-            if raises:
-                raise Exception('Image %s not found!' % name)
-            return None
+            raise Exception('Image %s not found!' % name)
         else:
-            return data[0]
+            self.image = data[0]
 
-    def size_lookup(self, name, raises=False):
+    def size_lookup(self, name):
         """Lookup size object based on size given.
         :param name: Image name.
         :type name: str
-        :param raises: Raise exception if size not found.
-        :type raises: bool
-        :return: Image object.
-        :rtype: object
         """
         data = filter(lambda elm: elm.name == name, self.sizes)
         if len(data) == 0:
-            if raises:
-                raise Exception('Size %s not found!' % name)
-            return None
+            raise Exception('Size %s not found!' % name)
         else:
-            return data[0]
+            self.size = data[0]
 
-    def network_lookup(self, name, raises=False):
+    def network_lookup(self, name):
         """Lookup network object based on network given.
         :param name: Network name.
         :type name: str
-        :param raises: Raise exception if network not found.
-        :type raises: bool
-        :return: Network object.
-        :rtype: list
         """
         data = filter(lambda elm: elm.name == name, self.networks)
         if len(data) == 0:
-            if raises:
-                raise Exception('Network %s not found!' % name)
-            return None
+            raise Exception('Network %s not found!' % name)
         else:
-            return data
+            self.network = data
 
-    def node_lookup(self, name, raises=False):
+    def node_lookup(self, name):
         """Lookup node object based on node given.
         :param name: Node name.
         :type name: str
-        :param raises: Raise exception if node not found.
-        :type raises: bool
-        :return: Node object.
-        :rtype: object
         """
         data = filter(lambda elm: elm.name == name, self.nodes)
         if len(data) == 0:
-            if raises:
-                raise Exception('Node %s not found!' % name)
-            return None
+            raise Exception('Node %s not found!' % name)
         else:
-            return data[0]
+            self.node = data[0]
 
-    def associate_floating_ip(self):
+    def floating_ip_pool_lookup(self, name):
+        """Lookup floating IP pool object based on floating ip pool name.
+        :param name: Floating IP pool name.
+        :type name: str
+        """
+        data = filter(lambda elm: elm.name == name, self.floating_ip_pools)
+        if len(data) == 0:
+            raise Exception('Floating IP pool %s not found!' % name)
+        else:
+            self.floating_ip_pool = data[0]
+
+    def associate_floating_ip(self, floating_ip_pool):
         """Associate floating ip to node."""
-        raise NotImplementedError
+        # Lookup floating IP pool object
+        self.floating_ip_pool_lookup(floating_ip_pool)
+
+        # Create floating IP within pool
+        float_ip = self.floating_ip_pool.create_floating_ip()
+
+        # Attach floating IP to node
+        self.driver.ex_attach_floating_ip_to_node(self.node, float_ip)
 
     def disassociate_floating_ip(self):
         """Disassociate floating ip from node."""
         raise NotImplementedError
 
-    def create(self, name, image, size, network):
+    def create(self, name, image, size, network, floating_ip_pool):
         """Create node.
         :param name: Node name.
         :type name: str
@@ -174,29 +248,30 @@ class OpenStack(Authentication):
         :type size: str
         :param network: Network name.
         :type network: str
+        :param floating_ip_pool: Floating IP pool name.
+        :type floating_ip_pool: str
         """
         # Lookup image object
-        _image = self.image_lookup(image, raises=True)
+        self.image_lookup(image)
 
         # Lookup size object
-        _size = self.size_lookup(size, raises=True)
+        self.size_lookup(size)
 
         # Lookup network object
-        _network = self.network_lookup(network, raises=True)
+        self.network_lookup(network)
 
         # Create node
-        node = self.driver.create_node(
+        self.node = self.driver.create_node(
             name=name,
-            image=_image,
-            size=_size,
-            networks=_network
+            image=self.image,
+            size=self.size,
+            networks=self.network
         )
 
         # Wait for node to finish building
-        self.driver.wait_until_running([node])
+        self.driver.wait_until_running([self.node])
 
-        # TODO: Associate floating ip
-        # self.associate_floating_ip()
+        self.associate_floating_ip(floating_ip_pool)
 
     def delete(self, name):
         """Delete node.
@@ -204,9 +279,10 @@ class OpenStack(Authentication):
         :type name: str
         """
         # Lookup node object
-        _node = self.node_lookup(name, raises=True)
+        self.node_lookup(name)
 
         # TODO: Disassociate floating ip
+        # self.disassociate_floating_ip()
 
         # Delete node
-        self.driver.destroy_node(_node)
+        self.driver.destroy_node(self.node)
