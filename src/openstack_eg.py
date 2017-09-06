@@ -6,8 +6,9 @@ repository for configuring your trystack tenant.
 
 https://github.com/rywillia/trystack_utilities
 """
-from providers import OpenStack
 import time
+
+from providers import OpenStack
 
 if '__main__' == __name__:
     obj = OpenStack('../examples/auth.yml')

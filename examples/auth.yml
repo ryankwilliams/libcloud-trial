@@ -6,3 +6,4 @@ openstack:
   tenant:
   username:
   password:
+  region:

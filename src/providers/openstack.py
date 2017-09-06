@@ -1,5 +1,6 @@
 """OpenStack module using libcloud to interface with OpenStack."""
 import libcloud.security
+import urllib3
 import yaml
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
@@ -20,6 +21,9 @@ class Authentication(object):
         # ignore SSL
         libcloud.security.VERIFY_SSL_CERT = False
 
+        # suppress insecure request warning messages
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
         if auth_file:
             print('Fetching authentication by file %s.' % auth_file)
 
@@ -29,12 +33,13 @@ class Authentication(object):
 
             try:
                 # establish authentication with provider
-                self.driver = get_driver(Provider.OPENSTACK)(
+                self._driver = get_driver(Provider.OPENSTACK)(
                     data[PROVIDER]['username'],
                     data[PROVIDER]['password'],
                     ex_tenant_name=data[PROVIDER]['tenant'],
                     ex_force_auth_url=data[PROVIDER]['url'],
-                    ex_force_auth_version='2.0_password'
+                    ex_force_auth_version='2.0_password',
+                    ex_force_service_region=data[PROVIDER]['region']
                 )
             except KeyError as ex:
                 raise KeyError(
@@ -55,6 +60,7 @@ class Authentication(object):
     @driver.setter
     def driver(self, value):
         """Set driver object.
+
         :param value: Driver instance.
         :type value: object
         """
@@ -72,6 +78,8 @@ class OpenStack(Authentication):
         self._size = object
         self._network = object
         self._floating_ip_pool = object
+        self._floating_ip = object
+        self._key_pair = object
 
     @property
     def node(self):
@@ -131,17 +139,45 @@ class OpenStack(Authentication):
 
     @property
     def floating_ip_pool(self):
-        """Return floating IP pool object."""
+        """Return floating ip pool object."""
         return self._floating_ip_pool
 
     @floating_ip_pool.setter
     def floating_ip_pool(self, floating_ip_pool):
         """Set network object.
 
-        :param floating_ip_pool: Floating IP pool object.
+        :param floating_ip_pool: Floating ip pool object.
         :type floating_ip_pool: object
         """
         self._floating_ip_pool = floating_ip_pool
+
+    @property
+    def key_pair(self):
+        """Return key pair."""
+        return self._key_pair
+
+    @key_pair.setter
+    def key_pair(self, key_pair):
+        """Set key pair object.
+
+        :param key_pair: Key pair object.
+        :type key_pair: object
+        """
+        self._key_pair = key_pair
+
+    @property
+    def floating_ip(self):
+        """Return floating ip object."""
+        return self._floating_ip
+
+    @floating_ip.setter
+    def floating_ip(self, floating_ip):
+        """Set network object.
+
+        :param floating_ip: Floating ip object.
+        :type floating_ip: object
+        """
+        self._floating_ip = floating_ip
 
     @property
     def nodes(self):
@@ -168,8 +204,14 @@ class OpenStack(Authentication):
         """Return list of floating ip pools."""
         return self.driver.ex_list_floating_ip_pools()
 
+    @property
+    def key_pairs(self):
+        """Return list of key pairs."""
+        return self.driver.list_key_pairs()
+
     def image_lookup(self, name):
         """Image lookup to fetch image object.
+
         :param name: Image name.
         :type name: str
         """
@@ -181,6 +223,7 @@ class OpenStack(Authentication):
 
     def size_lookup(self, name):
         """Lookup size object based on size given.
+
         :param name: Image name.
         :type name: str
         """
@@ -192,6 +235,7 @@ class OpenStack(Authentication):
 
     def network_lookup(self, name):
         """Lookup network object based on network given.
+
         :param name: Network name.
         :type name: str
         """
@@ -203,6 +247,7 @@ class OpenStack(Authentication):
 
     def node_lookup(self, name):
         """Lookup node object based on node given.
+
         :param name: Node name.
         :type name: str
         """
@@ -213,32 +258,75 @@ class OpenStack(Authentication):
             self.node = data[0]
 
     def floating_ip_pool_lookup(self, name):
-        """Lookup floating IP pool object based on floating ip pool name.
-        :param name: Floating IP pool name.
+        """Lookup floating ip pool object based on floating ip pool name.
+
+        :param name: Floating ip pool name.
         :type name: str
         """
         data = filter(lambda elm: elm.name == name, self.floating_ip_pools)
         if len(data) == 0:
-            raise Exception('Floating IP pool %s not found!' % name)
+            raise Exception('Floating ip pool %s not found!' % name)
         else:
             self.floating_ip_pool = data[0]
 
+    def key_pair_lookup(self, name):
+        """Lookup key pair object based on key pair name given.
+
+        :param name: Key pair name.
+        :type name: str
+        """
+        # no key pair to lookup
+        if not name:
+            return
+
+        data = filter(lambda elm: elm.name == name, self.key_pairs)
+        if len(data) == 0:
+            raise Exception('Key pair %s not found!' % name)
+        else:
+            self.key_pair = data[0]
+
+    def floating_ip_lookup(self):
+        """Lookup floating ip for a node."""
+        address = None
+
+        for key in self.node.extra['addresses']:
+            for network in self.node.extra['addresses'][key]:
+                # skip if network is not type floating
+                if network['OS-EXT-IPS:type'] != 'floating':
+                    continue
+                self.floating_ip = network['addr']
+                break
+
+        if not self.floating_ip:
+            raise Exception('Unable to get floating ip for node!')
+
     def associate_floating_ip(self, floating_ip_pool):
         """Associate floating ip to node."""
-        # Lookup floating IP pool object
+        # Lookup floating ip pool object
         self.floating_ip_pool_lookup(floating_ip_pool)
 
-        # Create floating IP within pool
+        # create floating ip within pool
         float_ip = self.floating_ip_pool.create_floating_ip()
 
-        # Attach floating IP to node
+        # attach floating ip to node
         self.driver.ex_attach_floating_ip_to_node(self.node, float_ip)
 
     def disassociate_floating_ip(self):
         """Disassociate floating ip from node."""
-        raise NotImplementedError
+        # lookup floating ip for node
+        self.floating_ip_lookup()
 
-    def create(self, name, image, size, network, floating_ip_pool):
+        # get floating ip object
+        float_ip = self.driver.ex_get_floating_ip(self.floating_ip)
+
+        # detach floating ip from node
+        self.driver.ex_detach_floating_ip_from_node(self.node, float_ip)
+
+        # delete floating ip
+        self.driver.ex_delete_floating_ip(float_ip)
+
+    def create(self, name, image, size, network, floating_ip_pool,
+               key_pair=None):
         """Create node.
         :param name: Node name.
         :type name: str
@@ -248,29 +336,43 @@ class OpenStack(Authentication):
         :type size: str
         :param network: Network name.
         :type network: str
-        :param floating_ip_pool: Floating IP pool name.
+        :param floating_ip_pool: Floating ip pool name.
         :type floating_ip_pool: str
+        :param key_pair: Name of the key pair to inject into node.
+        :type key_pair: str
         """
-        # Lookup image object
+        # lookup image object
         self.image_lookup(image)
 
-        # Lookup size object
+        # lookup size object
         self.size_lookup(size)
 
-        # Lookup network object
+        # lookup network object
         self.network_lookup(network)
 
-        # Create node
-        self.node = self.driver.create_node(
-            name=name,
-            image=self.image,
-            size=self.size,
-            networks=self.network
-        )
+        # create node
+        if key_pair:
+            # with key pair
+            self.node = self.driver.create_node(
+                name=name,
+                image=self.image,
+                size=self.size,
+                networks=self.network,
+                ex_keyname=key_pair
+            )
+        else:
+            # without key pair
+            self.node = self.driver.create_node(
+                name=name,
+                image=self.image,
+                size=self.size,
+                networks=self.network
+            )
 
-        # Wait for node to finish building
+        # wait for node to finish building
         self.driver.wait_until_running([self.node])
 
+        # associate floating ip with node
         self.associate_floating_ip(floating_ip_pool)
 
     def delete(self, name):
@@ -278,11 +380,11 @@ class OpenStack(Authentication):
         :param name: Node name.
         :type name: str
         """
-        # Lookup node object
+        # lookup node object
         self.node_lookup(name)
 
-        # TODO: Disassociate floating ip
-        # self.disassociate_floating_ip()
+        # dissociate floating ip from node
+        self.disassociate_floating_ip()
 
-        # Delete node
+        # delete node
         self.driver.destroy_node(self.node)
